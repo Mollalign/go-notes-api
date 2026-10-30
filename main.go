@@ -12,7 +12,9 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"go-notes-api/internal/config"
+	"go-notes-api/internal/database"
 	"go-notes-api/internal/handlers"
+	"go-notes-api/internal/repositories"
 	"go-notes-api/internal/services"
 )
 
@@ -270,7 +272,29 @@ func main() {
 		log.Fatal(err)
 	}
 
-	router := gin.New()
+	dbCfg, err := config.LoadDatabase()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	dbCtx, cancel := context.WithTimeout(
+		context.Background(),
+		5*time.Second,
+	)
+
+	db, err := database.Open(dbCtx, dbCfg)
+	cancel()
+
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+
+	noteRepo := repositories.NewNoteRepository(db)
+	noteService := services.NewService(noteRepo)
+	noteHandler := handlers.NewNoteHandler(noteService)
+
+	router := gin.Default()
 
 	router.Use(RequestIDMiddleware())
 	router.Use(RequestLogger())
@@ -279,10 +303,8 @@ func main() {
 
 	router.GET("/hello", handlers.Hello)
 
-	noteService := services.NewService()
-	noteHandler := handlers.NewNoteHandler(noteService)
-
 	router.POST("/notes/validate", noteHandler.ValidateNoteInput)
+	router.POST("/notes", noteHandler.CreateNote)
 
 	router.GET("/welcome", func(c *gin.Context) {
 		c.String(http.StatusOK, "Welcome to my Go Notes API!")

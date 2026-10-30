@@ -1,8 +1,10 @@
 package services
 
 import (
+	"context"
 	"errors"
 	"strings"
+	"time"
 )
 
 var ErrTitleRequired = errors.New("title is required")
@@ -12,10 +14,27 @@ type CreateInput struct {
 	Content string
 }
 
-type Service struct{}
+type Note struct {
+	ID        int64     `json:"id"`
+	Title     string    `json:"title"`
+	Content   string    `json:"content"`
+	CreatedAt time.Time `json:"created_at"`
+}
 
-func NewService() *Service {
-	return &Service{}
+// Repository defines the data operations the service needs
+type Repository interface {
+	Create(ctx context.Context, input CreateInput) (Note, error)
+	List(ctx context.Context) ([]Note, error)
+}
+
+type Service struct {
+	repo Repository
+}
+
+func NewService(repo Repository) *Service {
+	return &Service{
+		repo: repo,
+	}
 }
 
 func (s *Service) ValidateCreateInput(
@@ -28,4 +47,27 @@ func (s *Service) ValidateCreateInput(
 	}
 
 	return input, nil
+}
+
+func (s *Service) Create(
+	ctx context.Context,
+	input CreateInput,
+) (Note, error) {
+	input, err := s.ValidateCreateInput(input)
+	if err != nil {
+		return Note{}, err
+	}
+
+	note, err := s.repo.Create(ctx, input)
+	if err != nil {
+		return Note{}, err
+	}
+
+	return note, nil
+}
+
+func (s *Service) List(
+	ctx context.Context,
+) ([]Note, error) {
+	return s.repo.List(ctx)
 }
